@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ABA Khmer Payment Speaker</title>
+    <title>DomZzz ABA Khmer Payment Speaker</title>
     <style>
         :root { --primary: #00ff88; --bg: #0f172a; }
         body { 
@@ -39,7 +39,7 @@
 </head>
 <body>
 
-    <div class="watermark">ABA KHMER</div>
+    <div class="watermark">DomZzz</div>
 
     <button class="btn-start" id="startBtn" onclick="activateSystem()">ចាប់ផ្ដើម (START)</button>
 
@@ -52,7 +52,7 @@
 
     <script>
         // 1. UPDATE YOUR TOKEN HERE
-        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7UE"; 
+        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7UE";; 
         const CHAT_ID = -1003672530836;
         
         let lastId = 0;
@@ -62,7 +62,7 @@
             active = true;
             document.getElementById('startBtn').style.display = 'none';
             document.getElementById('status').innerText = "📡 កំពុងរង់ចាំ ABA QR...";
-            speakKhmer("ប្រព័ន្ធរួចរាល់"); 
+            speakKhmer("ស្វាគមន៏មកកាន់ប្រព័ន្ធគ្រប់គ្រងសាច់ប្រាក់របស់ Dom"); 
         }
 
         async function update() {
@@ -110,7 +110,7 @@
         function speakKhmer(text) {
             const utter = new SpeechSynthesisUtterance(text);
             utter.lang = 'km-KH'; // FORCES KHMER VOICE
-            utter.rate = 0.85;    // Professional natural speed
+            utter.rate = 0.90;    // Professional natural speed
             window.speechSynthesis.speak(utter);
         }
 
