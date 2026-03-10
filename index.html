@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ABA Khmer Payment Speaker</title>
+    <title>ABA Khmer Speaker - Local MP3</title>
     <style>
         :root { --primary: #00ff88; --bg: #0f172a; }
         body { 
@@ -12,23 +12,18 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100vh; margin: 0; overflow: hidden;
         }
-        
         .watermark { position: fixed; font-size: 10vw; opacity: 0.02; font-weight: 900; z-index: -1; pointer-events: none; }
-        
         .card { 
             background: rgba(30, 41, 59, 0.8); padding: 50px; border-radius: 40px;
             border: 2px solid var(--primary); text-align: center; width: 85%; max-width: 500px;
-            box-shadow: 0 0 50px rgba(0, 255, 136, 0.1);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 0 50px rgba(0, 255, 136, 0.1); backdrop-filter: blur(10px);
         }
-
         @keyframes paymentGlow {
             0% { transform: scale(1); box-shadow: 0 0 20px var(--primary); }
             50% { transform: scale(1.1); box-shadow: 0 0 80px var(--primary); }
             100% { transform: scale(1); box-shadow: 0 0 20px var(--primary); }
         }
         .animate-hit { animation: paymentGlow 0.8s ease-out; }
-
         #amount { font-size: 5em; color: var(--primary); font-weight: bold; margin: 20px 0; }
         .btn-start {
             background: var(--primary); color: var(--bg); border: none; padding: 20px 60px;
@@ -48,10 +43,9 @@
         <div id="amount">---</div>
     </div>
 
-    <audio id="bell" src="https://actions.google.com/sounds/v1/bells/service_bell.ogg"></audio>
+    <audio id="localBell" src="bell.mp3" preload="auto"></audio>
 
     <script>
-        // 1. UPDATE YOUR TOKEN HERE
         const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7UE"; 
         const CHAT_ID = -1003672530836;
         
@@ -62,7 +56,11 @@
             active = true;
             document.getElementById('startBtn').style.display = 'none';
             document.getElementById('status').innerText = "📡 កំពុងរង់ចាំ ABA QR...";
-            speakKhmer("ប្រព័ន្ធរួចរាល់"); 
+            
+            // Play test bell
+            const bell = document.getElementById('localBell');
+            bell.play();
+            setTimeout(() => speakKhmer("ប្រព័ន្ធរួចរាល់"), 800);
         }
 
         async function update() {
@@ -81,36 +79,35 @@
         }
 
         function handlePayment(text) {
-            // Find numbers like $65.00 or ៛100
             const match = text.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
             if (match) {
-                // Remove .00 decimals
                 let val = Math.floor(parseFloat(match[0].replace(/,/g, '')));
-                
-                // Detect Currency
                 let currency = (text.includes("$") || text.toUpperCase().includes("USD")) ? "ដុល្លារ" : "រៀល";
                 let symbol = (currency === "ដុល្លារ") ? "$" : "៛";
 
-                // TEXT TO SPEAK
                 const sentence = `បានទទួលទឹកប្រាក់ចំនួន ${val} ${currency}`;
 
-                // UI & Animation
+                // UI
                 const card = document.getElementById('mainCard');
                 document.getElementById('amount').innerText = val.toLocaleString() + symbol;
                 card.classList.remove('animate-hit');
                 void card.offsetWidth;
                 card.classList.add('animate-hit');
 
-                // Sound & Voice
-                document.getElementById('bell').play();
-                setTimeout(() => speakKhmer(sentence), 600);
+                // 1. Play LOCAL bell.mp3
+                const bell = document.getElementById('localBell');
+                bell.currentTime = 0; 
+                bell.play();
+
+                // 2. Wait for bell then speak Khmer
+                setTimeout(() => speakKhmer(sentence), 1000);
             }
         }
 
         function speakKhmer(text) {
             const utter = new SpeechSynthesisUtterance(text);
-            utter.lang = 'km-KH'; // FORCES KHMER VOICE
-            utter.rate = 0.85;    // Professional natural speed
+            utter.lang = 'km-KH';
+            utter.rate = 0.85;
             window.speechSynthesis.speak(utter);
         }
 
