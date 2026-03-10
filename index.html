@@ -3,118 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DomZzz ABA Khmer Payment Speaker</title>
+    <title>DomZzz Payment Monitor</title>
     <style>
         :root { --primary: #00ff88; --bg: #0f172a; }
         body { 
             background-color: var(--bg); color: white; 
-            font-family: 'Khmer OS Battambang', sans-serif;
+            font-family: 'Khmer OS Battambang', -apple-system, sans-serif;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100vh; margin: 0; overflow: hidden;
         }
         
-        .watermark { position: fixed; font-size: 10vw; opacity: 0.02; font-weight: 900; z-index: -1; pointer-events: none; }
+        /* Watermark Background */
+        .watermark { 
+            position: fixed; font-size: 12vw; opacity: 0.02; font-weight: 900; 
+            z-index: -1; pointer-events: none; user-select: none;
+        }
         
+        /* Main Card */
         .card { 
-            background: rgba(30, 41, 59, 0.8); padding: 50px; border-radius: 40px;
-            border: 2px solid var(--primary); text-align: center; width: 85%; max-width: 500px;
+            background: rgba(30, 41, 59, 0.8); padding: 60px; border-radius: 40px;
+            border: 2px solid var(--primary); text-align: center; width: 85%; max-width: 550px;
             box-shadow: 0 0 50px rgba(0, 255, 136, 0.1);
             backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
         }
 
-        @keyframes paymentGlow {
-            0% { transform: scale(1); box-shadow: 0 0 20px var(--primary); }
-            50% { transform: scale(1.1); box-shadow: 0 0 80px var(--primary); }
-            100% { transform: scale(1); box-shadow: 0 0 20px var(--primary); }
+        /* Payment Animation (Bounce & Glow) */
+        @keyframes paymentHit {
+            0% { transform: scale(1); box-shadow: 0 0 50px rgba(0, 255, 136, 0.1); }
+            50% { transform: scale(1.15); box-shadow: 0 0 100px rgba(0, 255, 136, 0.6); }
+            100% { transform: scale(1); box-shadow: 0 0 50px rgba(0, 255, 136, 0.2); }
         }
-        .animate-hit { animation: paymentGlow 0.8s ease-out; }
+        .animate-payment { animation: paymentHit 0.8s ease-out; }
 
-        #amount { font-size: 5em; color: var(--primary); font-weight: bold; margin: 20px 0; }
+        #amount { 
+            font-size: 5em; color: var(--primary); font-weight: bold; margin: 25px 0; 
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+        }
+
+        .status { font-size: 16px; color: #94a3b8; letter-spacing: 1px; }
+
+        /* Start Button */
         .btn-start {
-            background: var(--primary); color: var(--bg); border: none; padding: 20px 60px;
-            border-radius: 50px; font-weight: bold; cursor: pointer; font-size: 1.5em; 
-            margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+            background: var(--primary); color: var(--bg); border: none; padding: 18px 50px;
+            border-radius: 50px; font-weight: bold; cursor: pointer; font-size: 1.4em; 
+            margin-bottom: 40px; box-shadow: 0 10px 20px rgba(0, 255, 136, 0.3);
+            transition: 0.3s;
         }
+        .btn-start:hover { transform: translateY(-3px); box-shadow: 0 15px 25px rgba(0, 255, 136, 0.5); }
     </style>
 </head>
 <body>
 
     <div class="watermark">DomZzz</div>
 
-    <button class="btn-start" id="startBtn" onclick="activateSystem()">ចាប់ផ្ដើម (START)</button>
+    <button class="btn-start" id="startBtn" onclick="initSystem()">ចុចទីនេះដើម្បីចាប់ផ្ដើម (START)</button>
 
-    <div class="card" id="mainCard">
-        <h2 id="status">រង់ចាំការបង់ប្រាក់...</h2>
+    <div class="card" id="paymentCard">
+        <h2 id="statusTitle">រង់ចាំការបង់ប្រាក់...</h2>
         <div id="amount">---</div>
+        <div class="status" id="connStatus">📡 កំពុងភ្ជាប់ទៅ bot...</div>
     </div>
 
-    <audio id="bell" src="https://actions.google.com/sounds/v1/bells/service_bell.ogg"></audio>
+    <audio id="bell" src="https://actions.google.com/sounds/v1/bells/service_bell.ogg" preload="auto"></audio>
 
     <script>
-        // 1. UPDATE YOUR TOKEN HERE
-        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7UE";; 
-        const CHAT_ID = -1003672530836;
-        
-        let lastId = 0;
-        let active = false;
+        // ================= CONFIG =================
+        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7U"; // <--- Put your Token here
+        const CHAT_ID = -1003672530836;          // Your Group ID
+        // ==========================================
 
-        function activateSystem() {
-            active = true;
+        let lastMsgId = 0;
+        let isReady = false;
+
+        function initSystem() {
+            isReady = true;
             document.getElementById('startBtn').style.display = 'none';
-            document.getElementById('status').innerText = "📡 កំពុងរង់ចាំ ABA QR...";
-            speakKhmer("ស្វាគមន៏មកកាន់ប្រព័ន្ធគ្រប់គ្រងសាច់ប្រាក់របស់ Dom"); 
+            document.getElementById('statusTitle').innerText = "រង់ចាំការបង់ប្រាក់ពី ABA...";
+            document.getElementById('connStatus').innerText = "📡 ប្រព័ន្ធកំពុងដំណើរការ";
+            
+            // Wake up the voice engine
+            speak("ប្រព័ន្ធកំពុងដំណើរការ"); 
         }
 
-        async function update() {
-            if (!active) return;
+        async function fetchTelegram() {
+            if (!isReady) return;
             try {
-                const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1`);
-                const d = await r.json();
-                if (d.ok && d.result.length > 0) {
-                    const m = d.result[0].message;
-                    if (m.chat.id === CHAT_ID && m.message_id !== lastId) {
-                        lastId = m.message_id;
-                        if (m.text) handlePayment(m.text);
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1`);
+                const data = await response.json();
+                
+                if (data.ok && data.result.length > 0) {
+                    const message = data.result[0].message;
+                    
+                    // Check for new message in the specific chat
+                    if (message.chat.id === CHAT_ID && message.message_id !== lastMsgId) {
+                        lastMsgId = message.message_id;
+                        if (message.text) handleABA(message.text);
                     }
                 }
-            } catch (e) {}
+            } catch (err) { console.error("Update failed"); }
         }
 
-        function handlePayment(text) {
-            // Find numbers like $65.00 or ៛100
-            const match = text.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-            if (match) {
-                // Remove .00 decimals
-                let val = Math.floor(parseFloat(match[0].replace(/,/g, '')));
+        function handleABA(text) {
+            // Find numbers (handles $65.00 or ៛100)
+            const numberMatch = text.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+            
+            if (numberMatch) {
+                // Remove decimals (.00) and commas
+                let rawVal = numberMatch[0].replace(/,/g, '');
+                let cleanNum = Math.floor(parseFloat(rawVal));
                 
-                // Detect Currency
-                let currency = (text.includes("$") || text.toUpperCase().includes("USD")) ? "ដុល្លារ" : "រៀល";
-                let symbol = (currency === "ដុល្លារ") ? "$" : "៛";
+                // Identify Currency
+                let isUSD = text.includes("$") || text.toUpperCase().includes("USD");
+                let currencyName = isUSD ? "ដុល្លារ" : "រៀល";
+                let currencySym = isUSD ? "$" : "៛";
 
-                // TEXT TO SPEAK
-                const sentence = `បានទទួលទឹកប្រាក់ចំនួន ${val} ${currency}`;
+                // Build the phrase: បានទទួលទឹកប្រាក់ចំនួន [Number] [Currency]
+                const speechPhrase = `បានទទួលទឹកប្រាក់ចំនួន ${cleanNum} ${currencyName}`;
 
-                // UI & Animation
-                const card = document.getElementById('mainCard');
-                document.getElementById('amount').innerText = val.toLocaleString() + symbol;
-                card.classList.remove('animate-hit');
-                void card.offsetWidth;
-                card.classList.add('animate-hit');
+                // --- UI UPDATE & ANIMATION ---
+                const card = document.getElementById('paymentCard');
+                document.getElementById('statusTitle').innerText = "បានទទួលប្រាក់ថ្មី!";
+                document.getElementById('amount').innerText = `${cleanNum.toLocaleString()}${currencySym}`;
+                
+                // Trigger Animation
+                card.classList.remove('animate-payment');
+                void card.offsetWidth; // Force restart
+                card.classList.add('animate-payment');
 
-                // Sound & Voice
-                document.getElementById('bell').play();
-                setTimeout(() => speakKhmer(sentence), 600);
+                // --- AUDIO OUTPUT ---
+                const bell = document.getElementById('bell');
+                bell.play(); // Play "Ding"
+
+                // Delay speech slightly for the bell
+                setTimeout(() => {
+                    speak(speechPhrase);
+                }, 600);
             }
         }
 
-        function speakKhmer(text) {
-            const utter = new SpeechSynthesisUtterance(text);
-            utter.lang = 'km-KH'; // FORCES KHMER VOICE
-            utter.rate = 0.90;    // Professional natural speed
-            window.speechSynthesis.speak(utter);
+        function speak(text) {
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'km-KH'; // Khmer Voice
+            msg.rate = 0.85;    // Professional clear speed
+            msg.pitch = 1.0;
+            window.speechSynthesis.speak(msg);
         }
 
-        setInterval(update, 2000);
+        // Loop every 2 seconds
+        setInterval(fetchTelegram, 2000);
     </script>
 </body>
 </html>
