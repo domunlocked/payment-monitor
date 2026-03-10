@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DomZzz Payment Speaker System</title>
+    <title>DomZzz Payment Speaker</title>
     <style>
         :root { --primary: #00ff88; --bg: #0f172a; }
         body { 
@@ -41,7 +41,7 @@
 
     <div class="watermark">DomZzz</div>
 
-    <button class="btn-start" id="startBtn" onclick="activateSystem()">ចាប់ផ្ដើម</button>
+    <button class="btn-start" id="startBtn" onclick="activateSystem()">ចាប់ផ្ដើម)</button>
 
     <div class="card" id="mainCard">
         <h2 id="status">រង់ចាំការបង់ប្រាក់...</h2>
@@ -52,7 +52,7 @@
 
     <script>
         // 1. UPDATE YOUR TOKEN HERE
-        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7UE"; 
+        const BOT_TOKEN = "8506598103:AAFUXUD80oKJU8TOhzOEtGPjpDxSJohPt7U"; 
         const CHAT_ID = -1003672530836;
         
         let lastId = 0;
@@ -62,7 +62,7 @@
             active = true;
             document.getElementById('startBtn').style.display = 'none';
             document.getElementById('status').innerText = "📡 កំពុងរង់ចាំ ABA QR...";
-            speakKhmer("ប្រព័ន្ធកំពុងដំណើរការ"); 
+            speakKhmer("ប្រព័ន្ធរួចរាល់"); 
         }
 
         async function update() {
