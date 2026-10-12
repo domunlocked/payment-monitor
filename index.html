@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10284a">
+  <meta name="description" content="A private, local-first ABA KHQR payment dashboard and Khmer voice announcer.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>DomZzz-Payment Speaker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="DomZzz-Payment Speaker home">
+      <span class="brand-icon" aria-hidden="true">◖))</span>
+      <span><strong>DomZzz-Payment Speaker</strong><small>ABA KHQR · local-first</small></span>
+    </a>
+    <label class="language-picker"><span data-i18n="language">Language</span>
+      <select id="language-select" aria-label="Dashboard language">
+        <option value="en">English</option>
+        <option value="km">ខ្មែរ</option>
+      </select>
+    </label>
+  </header>
+
+  <main class="dashboard">
+    <section class="intro">
+      <div>
+        <p class="eyebrow" data-i18n="eyebrow">PAYMENT MONITOR</p>
+        <h1 data-i18n="heading">Your payments, spoken in Khmer.</h1>
+        <p class="subheading" data-i18n="subheading">Private payment monitoring from your own Windows computer.</p>
+      </div>
+      <div id="connection-badge" class="status-pill status-offline" role="status" aria-live="polite">
+        <span class="status-dot"></span><span id="connection-label">Disconnected</span>
+      </div>
+    </section>
+
+    <section class="summary-grid" aria-label="Payment and audio status">
+      <article class="card latest-card">
+        <div class="card-heading"><span data-i18n="latestPayment">Latest payment</span><span class="card-icon" aria-hidden="true">↙</span></div>
+        <div id="latest-amount" class="latest-amount">—</div>
+        <div id="latest-caption" class="muted" data-i18n="noPayments">No payment received yet</div>
+      </article>
+      <article class="card speaker-card">
+        <div class="card-heading"><span data-i18n="speakerStatus">Speaker</span><span id="speaker-icon" class="card-icon speaker-icon" aria-hidden="true">◖))</span></div>
+        <div id="speaker-label" class="speaker-label" role="status" aria-live="polite">Audio is off</div>
+        <div id="voice-label" class="muted">Khmer voice not checked</div>
+      </article>
+    </section>
+
+    <section class="card controls-card" aria-labelledby="controls-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow" data-i18n="deviceControls">THIS DEVICE</p><h2 id="controls-heading" data-i18n="audioControls">Audio controls</h2></div>
+        <span id="queue-count" class="queue-badge" aria-live="polite">0 queued</span>
+      </div>
+      <div class="button-row">
+        <button id="enable-audio" class="button button-primary" type="button" data-i18n="enableAudio">Enable audio</button>
+        <button id="pause-audio" class="button button-secondary" type="button" disabled data-i18n="pauseAnnouncements">Pause announcements</button>
+        <button id="test-voice" class="button button-secondary" type="button" data-i18n="testVoice">Test Khmer voice</button>
+        <button id="export-csv" class="button button-secondary" type="button" disabled data-i18n="exportCsv">Export CSV</button>
+      </div>
+      <div class="sliders">
+        <label><span><span data-i18n="speechSpeed">Speech speed</span><output id="speed-value">1.0×</output></span>
+          <input id="speech-speed" type="range" min="0.7" max="1.2" step="0.1" value="1">
+        </label>
+        <label><span><span data-i18n="volume">Volume</span><output id="volume-value">80%</output></span>
+          <input id="speech-volume" type="range" min="0" max="100" step="5" value="80">
+        </label>
+        <label class="voice-select-label"><span data-i18n="khmerVoice">Khmer voice</span>
+          <select id="voice-select" aria-label="Khmer voice"><option value="" data-i18n="noKhmerVoice">No Khmer voice found</option></select>
+        </label>
+      </div>
+      <p id="audio-message" class="notice" role="status" aria-live="polite" data-i18n="audioHint">Audio plays only when this device has an installed Khmer voice, the browser permits speech, and the device is not muted.</p>
+    </section>
+
+    <section class="card payments-card" aria-labelledby="payments-heading">
+      <div class="section-heading payments-heading">
+        <div><p class="eyebrow" data-i18n="history">HISTORY</p><h2 id="payments-heading" data-i18n="recentPayments">Recent payments</h2></div>
+        <div id="filter-group" class="filter-group" role="group" aria-label="Filter payments by currency">
+          <button class="filter-button active" data-currency="ALL" type="button" data-i18n="allCurrencies">All</button>
+          <button class="filter-button" data-currency="USD" type="button">USD</button>
+          <button class="filter-button" data-currency="KHR" type="button">KHR</button>
+        </div>
+      </div>
+      <div id="payments-empty" class="empty-state">
+        <span class="empty-icon" aria-hidden="true">◷</span>
+        <strong data-i18n="waiting">Waiting for a new payment</strong>
+        <span data-i18n="waitingHint">Connect your local listener to show real payment notifications here.</span>
+      </div>
+      <div id="payments-table-wrap" class="table-wrap" hidden>
+        <table>
+          <thead><tr>
+            <th data-i18n="amount">Amount</th><th data-i18n="customer">Customer</th>
+            <th data-i18n="method">Method</th><th data-i18n="time">Received</th>
+            <th data-i18n="transaction">Transaction ID</th>
+          </tr></thead>
+          <tbody id="payments-body"></tbody>
+        </table>
+      </div>
+      <p id="filter-empty" class="muted filter-empty" hidden data-i18n="noMatchingPayments">No payments match this currency filter.</p>
+    </section>
+
+    <details class="card settings-card" open>
+      <summary><span><span class="eyebrow" data-i18n="connection">CONNECTION</span><strong data-i18n="connectListener">Connect to your listener</strong></span><span aria-hidden="true">⌄</span></summary>
+      <p class="settings-description" data-i18n="connectionHelp">The Python listener stays on your Windows computer. Enter its private API address and the token from your local .env file.</p>
+      <form id="connection-form">
+        <label><span data-i18n="apiAddress">Listener API address</span>
+          <input id="api-url" name="api-url" type="url" inputmode="url" placeholder="http://127.0.0.1:8765" autocomplete="url" required>
+        </label>
+        <label><span data-i18n="apiToken">Private API token</span>
+          <input id="api-token" name="api-token" type="password" autocomplete="off" minlength="32" required>
+        </label>
+        <div class="button-row">
+          <button class="button button-primary" type="submit" data-i18n="connect">Connect</button>
+          <button id="forget-token" class="button button-secondary" type="button" data-i18n="forgetToken">Forget saved token</button>
+        </div>
+      </form>
+      <p id="connection-message" class="notice" role="status" aria-live="polite" data-i18n="privacyHint">Your API token is stored only in this browser's local storage. Never share it or commit it to GitHub.</p>
+    </details>
+    <p id="global-error" class="error-banner" role="alert" hidden></p>
+  </main>
+
+  <footer><span data-i18n="footer">GitHub Pages hosts this static dashboard; your private listener and database stay on your computer.</span></footer>
+</body>
+</html>
