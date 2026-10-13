@@ -28,7 +28,7 @@ jobs:
       - name: Prepare static dashboard
         run: |
           mkdir -p _site
-          cp index.html styles.css app.js _site/
+          cp index.html styles.css app.js payment_notifications.js phone_speech.js remote-config.js _site/
       - name: Upload static dashboard
         uses: actions/upload-pages-artifact@v3
         with:

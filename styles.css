@@ -164,13 +164,58 @@ h2 {
 
 .controls-card {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.sign-in-card,
+.history-card {
+  margin-top: 22px;
+  padding: 23px 25px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.sign-in-card h2 {
+  margin-bottom: 5px;
+}
+
+.sign-in-card form {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.sign-in-card label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sign-in-card input {
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface-muted);
+  font: inherit;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
 }
 
 .button {
@@ -247,6 +292,14 @@ h2 {
   background: var(--red-soft);
 }
 
+.message-warning {
+  padding: 10px 12px;
+  border: 1px solid #ead9a7;
+  border-radius: 10px;
+  color: #715719;
+  background: #fff9e8;
+}
+
 .payment-card {
   margin-top: 24px;
   padding: 25px 27px 27px;
@@ -254,6 +307,39 @@ h2 {
   border-radius: 17px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.payment-card.payment-arrived {
+  border-color: #87c8a9;
+  box-shadow: 0 0 0 4px rgb(22 131 93 / 10%), var(--shadow);
+}
+
+.payment-history {
+  display: grid;
+  gap: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payment-history li {
+  display: grid;
+  grid-template-columns: minmax(85px, 0.7fr) minmax(105px, 1fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: center;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.payment-history strong {
+  color: #176b4e;
+  font-size: 14px;
+}
+
+.payment-history span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .payment-card-heading {
@@ -389,6 +475,11 @@ footer {
     padding: 13px;
   }
 
+  .sign-in-card,
+  .history-card {
+    padding: 19px 17px;
+  }
+
   .button {
     min-height: 52px;
   }
@@ -401,6 +492,14 @@ footer {
   .payment-meta > div {
     grid-template-columns: minmax(105px, 0.8fr) minmax(0, 1.2fr);
     gap: 10px;
+  }
+
+  .payment-history li {
+    grid-template-columns: minmax(80px, 0.7fr) minmax(0, 1fr);
+  }
+
+  .payment-history li span:last-child {
+    grid-column: 1 / -1;
   }
 }
 

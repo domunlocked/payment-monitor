@@ -1,9 +1,10 @@
-"""Load and validate local-only listener configuration."""
+"""Load local listener and optional secure remote-dashboard settings."""
 
 from dataclasses import dataclass
 import os
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -24,6 +25,8 @@ class Settings:
     log_level: str
     session_path: Path
     logs_path: Path
+    remote_api_origin: str | None = None
+    remote_access_token: str | None = None
 
 
 def get_settings(
@@ -77,6 +80,37 @@ def get_settings(
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL.")
+    remote_api_origin = os.getenv("REMOTE_API_ORIGIN", "").strip().rstrip("/")
+    remote_access_token = os.getenv("REMOTE_ACCESS_TOKEN", "").strip()
+    if bool(remote_api_origin) != bool(remote_access_token):
+        raise ValueError(
+            "Set both REMOTE_API_ORIGIN and REMOTE_ACCESS_TOKEN in .env, or leave both empty."
+        )
+    if remote_api_origin:
+        parsed_remote_origin = urlsplit(remote_api_origin)
+        if (
+            parsed_remote_origin.scheme != "https"
+            or parsed_remote_origin.hostname is None
+            or parsed_remote_origin.hostname.lower() in {"localhost", "127.0.0.1", "::1"}
+            or parsed_remote_origin.username
+            or parsed_remote_origin.password
+            or parsed_remote_origin.path
+            or parsed_remote_origin.query
+            or parsed_remote_origin.fragment
+        ):
+            raise ValueError("REMOTE_API_ORIGIN must be an HTTPS origin without a path.")
+        try:
+            remote_port = parsed_remote_origin.port
+        except ValueError as exc:
+            raise ValueError("REMOTE_API_ORIGIN contains an invalid port.") from exc
+        if remote_port is not None and not 1 <= remote_port <= 65535:
+            raise ValueError("REMOTE_API_ORIGIN contains an invalid port.")
+        if len(remote_access_token) < 32:
+            raise ValueError("REMOTE_ACCESS_TOKEN must contain at least 32 characters.")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", remote_access_token):
+            raise ValueError(
+                "REMOTE_ACCESS_TOKEN may contain only letters, numbers, hyphens, and underscores."
+            )
 
     database_path = Path(os.getenv("DATABASE_PATH", "payment_history.sqlite3"))
     if not database_path.is_absolute():
@@ -101,4 +135,6 @@ def get_settings(
         log_level=log_level,
         session_path=PROJECT_DIR / "payment-monitor.session",
         logs_path=PROJECT_DIR / "logs",
+        remote_api_origin=remote_api_origin or None,
+        remote_access_token=remote_access_token or None,
     )

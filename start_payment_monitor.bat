@@ -24,6 +24,16 @@ if not exist "%PROJECT_DIR%.env" (
     exit /b 1
 )
 
+"%PYTHON%" -c "from config import get_settings; import sys; sys.exit(0 if get_settings().remote_api_origin else 1)" >nul 2>&1
+if errorlevel 1 goto tunnel_checked
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = Get-Service -Name 'cloudflared' -ErrorAction SilentlyContinue; if (-not $s) { exit 2 }; if ($s.Status -ne 'Running') { try { Start-Service -Name 'cloudflared' -ErrorAction Stop; Start-Sleep -Seconds 2; $s = Get-Service -Name 'cloudflared' } catch { exit 3 } }; if ($s.Status -eq 'Running') { exit 0 }; exit 4" >nul 2>&1
+if errorlevel 1 (
+    echo Cloudflare Tunnel service is not running. Local monitoring can still start,
+    echo but remote phone access will remain offline until the tunnel service is installed and running.
+    >>"%PROJECT_DIR%logs\startup.log" echo [%DATE% %TIME%] Cloudflare Tunnel service is unavailable.
+)
+:tunnel_checked
+
 "%PYTHON%" -c "import json,urllib.request,sys; r=json.load(urllib.request.urlopen('http://127.0.0.1:8765/healthz',timeout=1)); sys.exit(0 if r.get('service')=='payment-monitor' else 1)" >nul 2>&1
 if not errorlevel 1 goto open_dashboard
 

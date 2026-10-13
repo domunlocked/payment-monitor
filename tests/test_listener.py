@@ -174,3 +174,36 @@ def test_unauthorized_session_requires_explicit_local_login(tmp_path) -> None:
     assert len(clients) == 1
     assert status["listener_running"] is False
     assert "listener.py --login" in status["message"]
+
+
+def test_new_event_keeps_source_message_ids_for_duplicate_protection(tmp_path) -> None:
+    async def run() -> tuple[dict, list[dict]]:
+        database = PaymentDatabase(tmp_path / "history.sqlite3")
+        manager = TelegramListenerManager(
+            settings(tmp_path),
+            database,
+        )
+        event = SimpleNamespace(
+            id=77,
+            chat_id=-1001234567890,
+            raw_text=(
+                "$12.50 paid by Private Customer (*844) on Oct 04, 01:55 PM "
+                "via ABA KHQR (Private Bank Plc) at Private Merchant. "
+                "Trx. ID: 100000000000077, APV: 512666."
+            ),
+        )
+        await manager._handle_message(event)
+        duplicate = SimpleNamespace(
+            id=77,
+            chat_id=-1001234567890,
+            raw_text=event.raw_text,
+        )
+        await manager._handle_message(duplicate)
+        _, payments = database.latest(limit=1)
+        return payments[0], payments
+
+    payment, payments = asyncio.run(run())
+    assert payment["source_chat_id"] == "-1001234567890"
+    assert payment["source_message_id"] == "77"
+    assert len(payments) == 1
+    assert payment["transaction_id"] == "100000000000077"

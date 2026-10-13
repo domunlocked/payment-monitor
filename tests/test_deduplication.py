@@ -141,3 +141,29 @@ def test_existing_database_is_migrated_without_losing_payment_rows(tmp_path) -> 
     assert rows[0]["transaction_id"] == PAYMENT["transaction_id"]
     assert rows[0]["payment_status"] is None
     assert database.add_payment(PAYMENT) is False
+
+
+def test_telegram_source_ids_prevent_duplicate_messages_after_restart(tmp_path) -> None:
+    path = tmp_path / "history.sqlite3"
+    database = PaymentDatabase(path)
+    assert database.add_payment(
+        PAYMENT,
+        source_chat_id="-1001234567890",
+        source_message_id=42,
+    )
+    assert not database.add_payment(
+        dict(PAYMENT, transaction_id="100000000000002"),
+        source_chat_id="-1001234567890",
+        source_message_id=42,
+    )
+
+    restarted = PaymentDatabase(path)
+    assert not restarted.add_payment(
+        dict(PAYMENT, transaction_id="100000000000003"),
+        source_chat_id="-1001234567890",
+        source_message_id=42,
+    )
+    _, rows = restarted.latest()
+    assert len(rows) == 1
+    assert rows[0]["source_chat_id"] == "-1001234567890"
+    assert rows[0]["source_message_id"] == "42"

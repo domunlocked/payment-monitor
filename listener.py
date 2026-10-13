@@ -170,7 +170,13 @@ class TelegramListenerManager:
         payment = parse_payment_message(event.raw_text or "")
         if payment is None:
             return
-        inserted = self.database.add_payment(payment.to_dict())
+        chat_id = getattr(event, "chat_id", None) or self.settings.chat_id
+        message_id = getattr(event, "id", None)
+        inserted = self.database.add_payment(
+            payment.to_dict(),
+            source_chat_id=chat_id if message_id is not None else None,
+            source_message_id=message_id,
+        )
         log = logging.getLogger("payment-monitor.telegram")
         if inserted:
             log.info("Recorded a new payment notification.")
@@ -324,6 +330,8 @@ async def run_listener(settings: Settings, auto_start_listener: bool = False) ->
         listener=manager,
         static_dir=PROJECT_DIR,
         api_origin=origin,
+        remote_api_origin=settings.remote_api_origin,
+        remote_access_token=settings.remote_access_token,
         auto_start_listener=auto_start_listener,
     )
     server = uvicorn.Server(

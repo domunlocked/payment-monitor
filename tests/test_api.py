@@ -7,6 +7,9 @@ from database import PaymentDatabase
 
 API_TOKEN = "test-only-token-with-more-than-thirty-two-characters"
 API_ORIGIN = "http://127.0.0.1:8765"
+REMOTE_ORIGIN = "https://payments.example.com"
+PAGES_ORIGIN = "https://domunlocked.github.io"
+REMOTE_ACCESS_TOKEN = "test-only-remote-access-key-with-more-than-thirty-two-characters"
 PAYMENT = {
     "currency": "KHR",
     "amount": "50000",
@@ -163,6 +166,32 @@ def test_autostart_starts_listener_and_shutdown_stops_it(tmp_path) -> None:
     assert listener.stop_calls == 1
 
 
+def test_background_cloud_worker_starts_and_stops_with_local_api(tmp_path) -> None:
+    class FakeWorker:
+        def __init__(self) -> None:
+            self.started = 0
+            self.stopped = 0
+
+        async def start(self) -> None:
+            self.started += 1
+
+        async def stop(self) -> None:
+            self.stopped += 1
+
+    worker = FakeWorker()
+    app = create_app(
+        PaymentDatabase(tmp_path / "worker.sqlite3"),
+        API_TOKEN,
+        listener=FakeListener(),
+        background_worker=worker,
+    )
+    with TestClient(app, base_url=API_ORIGIN) as client:
+        client.get("/")
+        assert client.get("/healthz").status_code == 200
+        assert worker.started == 1
+    assert worker.stopped == 1
+
+
 def test_start_endpoint_reports_missing_telegram_settings(tmp_path) -> None:
     class UnconfiguredListener(FakeListener):
         async def start(self) -> dict[str, object]:
@@ -195,7 +224,129 @@ def test_local_dashboard_serves_only_static_files(tmp_path) -> None:
     client = make_client(tmp_path)
     assert client.get("/").status_code == 200
     assert client.get("/styles.css").status_code == 200
+    assert client.get("/remote-config.js").status_code == 200
+    assert client.get("/payment_notifications.js").status_code == 200
+    assert client.get("/phone_speech.js").status_code == 200
     assert client.get("/app.js").status_code == 200
     assert client.get("/.env").status_code == 404
     assert client.get("/payment_history.sqlite3").status_code == 404
     assert client.get("/styles.css?path=../../.env").status_code == 200
+
+
+def test_remote_dashboard_requires_key_and_is_read_only(tmp_path) -> None:
+    database = PaymentDatabase(tmp_path / "history.sqlite3")
+    database.add_payment(PAYMENT)
+    app = create_app(
+        database,
+        API_TOKEN,
+        listener=FakeListener(connected=True),
+        remote_api_origin=REMOTE_ORIGIN,
+        remote_access_token=REMOTE_ACCESS_TOKEN,
+    )
+    client = TestClient(app, base_url=REMOTE_ORIGIN)
+    pages_headers = {"Origin": PAGES_ORIGIN}
+    assert client.get("/api/payments", headers=pages_headers).status_code == 401
+    assert client.get(
+        "/api/payments",
+        headers={**pages_headers, "Authorization": "Bearer invalid"},
+    ).status_code == 401
+    assert client.get(
+        "/api/payments",
+        headers={**pages_headers, "Authorization": f"Bearer {API_TOKEN}"},
+    ).status_code == 401
+
+    authorized = {
+        **pages_headers,
+        "Authorization": f"Bearer {REMOTE_ACCESS_TOKEN}",
+    }
+    response = client.get("/api/payments?limit=50", headers=authorized)
+    assert response.status_code == 200
+    remote_payment = response.json()["payments"][0]
+    assert remote_payment["amount"] == "50000"
+    assert remote_payment["currency"] == "KHR"
+    assert "announcement" in remote_payment
+    assert "customer_name" not in remote_payment
+    assert "account_suffix" not in remote_payment
+    assert "approval_code" not in remote_payment
+    assert response.headers["access-control-allow-origin"] == PAGES_ORIGIN
+    assert client.post(
+        "/api/listener/start",
+        headers=authorized,
+    ).status_code == 403
+    assert client.get("/", headers=authorized).status_code == 403
+    assert client.get(
+        "/api/payments",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Authorization": f"Bearer {API_TOKEN}",
+        },
+    ).status_code == 403
+
+
+def test_remote_cors_preflight_only_allows_dashboard_authorization_header(tmp_path) -> None:
+    app = create_app(
+        PaymentDatabase(tmp_path / "history.sqlite3"),
+        API_TOKEN,
+        remote_api_origin=REMOTE_ORIGIN,
+        remote_access_token=REMOTE_ACCESS_TOKEN,
+    )
+    client = TestClient(app, base_url=REMOTE_ORIGIN)
+    allowed = client.options(
+        "/api/payments",
+        headers={
+            "Origin": PAGES_ORIGIN,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert allowed.status_code == 204
+    assert allowed.headers["access-control-allow-origin"] == PAGES_ORIGIN
+
+    denied = client.options(
+        "/api/payments",
+        headers={
+            "Origin": PAGES_ORIGIN,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert denied.status_code == 403
+
+
+def test_remote_poll_returns_only_new_rows_and_database_deduplicates(tmp_path) -> None:
+    database = PaymentDatabase(tmp_path / "history.sqlite3")
+    assert database.add_payment(
+        PAYMENT,
+        source_chat_id="-1001234567890",
+        source_message_id=12,
+    )
+    app = create_app(
+        database,
+        API_TOKEN,
+        remote_api_origin=REMOTE_ORIGIN,
+        remote_access_token=REMOTE_ACCESS_TOKEN,
+    )
+    client = TestClient(app, base_url=REMOTE_ORIGIN)
+    headers = {
+        "Origin": PAGES_ORIGIN,
+        "Authorization": f"Bearer {REMOTE_ACCESS_TOKEN}",
+    }
+    initial = client.get("/api/payments?limit=50", headers=headers).json()
+    cursor = initial["cursor"]
+    assert len(initial["payments"]) == 1
+
+    newer = dict(PAYMENT, transaction_id="100000000000102", amount="60000")
+    assert database.add_payment(
+        newer,
+        source_chat_id="-1001234567890",
+        source_message_id=13,
+    )
+    assert not database.add_payment(
+        dict(newer, transaction_id="100000000000103"),
+        source_chat_id="-1001234567890",
+        source_message_id=13,
+    )
+    update = client.get(f"/api/payments?after_id={cursor}", headers=headers).json()
+    assert [payment["transaction_id"] for payment in update["payments"]] == [
+        "100000000000102"
+    ]

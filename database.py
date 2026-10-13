@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 _COLUMNS = (
-    "id, currency, amount, payment_status, customer_name, account_suffix, payment_method, "
+    "id, source_chat_id, source_message_id, currency, amount, payment_status, customer_name, account_suffix, payment_method, "
     "bank_name, merchant_name, payment_datetime, transaction_id, approval_code, "
     "received_at"
 )
@@ -37,6 +37,8 @@ class PaymentDatabase:
                 """
                 CREATE TABLE IF NOT EXISTS payments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_chat_id TEXT,
+                    source_message_id TEXT,
                     currency TEXT NOT NULL CHECK(currency IN ('USD', 'KHR')),
                     amount TEXT NOT NULL,
                     payment_status TEXT,
@@ -58,14 +60,31 @@ class PaymentDatabase:
             }
             if "payment_status" not in columns:
                 connection.execute("ALTER TABLE payments ADD COLUMN payment_status TEXT")
+            if "source_chat_id" not in columns:
+                connection.execute("ALTER TABLE payments ADD COLUMN source_chat_id TEXT")
+            if "source_message_id" not in columns:
+                connection.execute("ALTER TABLE payments ADD COLUMN source_message_id TEXT")
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_payments_received_at "
                 "ON payments(received_at)"
             )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_source_message "
+                "ON payments(source_chat_id, source_message_id) "
+                "WHERE source_chat_id IS NOT NULL AND source_message_id IS NOT NULL"
+            )
 
-    def add_payment(self, payment: dict[str, Any]) -> bool:
+    def add_payment(
+        self,
+        payment: dict[str, Any],
+        *,
+        source_chat_id: str | int | None = None,
+        source_message_id: str | int | None = None,
+    ) -> bool:
         """Insert one payment, returning False if its transaction ID already exists."""
         received_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if (source_chat_id is None) != (source_message_id is None):
+            raise ValueError("Both source chat ID and source message ID must be supplied together.")
         values = {key: payment.get(key) for key in (
             "currency", "amount", "payment_status", "customer_name", "account_suffix",
             "payment_method", "bank_name", "merchant_name", "payment_datetime",
@@ -77,16 +96,21 @@ class PaymentDatabase:
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO payments (
-                    currency, amount, payment_status, customer_name, account_suffix, payment_method,
+                    source_chat_id, source_message_id, currency, amount, payment_status, customer_name, account_suffix, payment_method,
                     bank_name, merchant_name, payment_datetime, transaction_id,
                     approval_code, received_at
                 ) VALUES (
-                    :currency, :amount, :payment_status, :customer_name, :account_suffix,
+                    :source_chat_id, :source_message_id, :currency, :amount, :payment_status, :customer_name, :account_suffix,
                     :payment_method, :bank_name, :merchant_name, :payment_datetime,
                     :transaction_id, :approval_code, :received_at
                 )
                 """,
-                {**values, "received_at": received_at},
+                {
+                    **values,
+                    "source_chat_id": str(source_chat_id) if source_chat_id is not None else None,
+                    "source_message_id": str(source_message_id) if source_message_id is not None else None,
+                    "received_at": received_at,
+                },
             )
             inserted = cursor.rowcount == 1
             cutoff = (

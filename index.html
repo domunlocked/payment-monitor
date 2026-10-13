@@ -4,10 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f6f8">
-  <meta name="description" content="A private payment monitor that runs on your Windows computer.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta name="description" content="A payment monitor with a private, access-key-protected phone dashboard.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>Payment Monitor</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="remote-config.js" defer></script>
+  <script src="payment_notifications.js" defer></script>
+  <script src="phone_speech.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -21,19 +24,33 @@
       </span>
       <span class="brand-title">Payment Monitor</span>
     </a>
-    <p class="privacy-label">Private · this computer only</p>
+    <p class="privacy-label">Private · access key required</p>
   </header>
 
   <main class="monitor">
     <section class="connection-row" aria-label="Telegram connection">
       <div>
-        <p class="eyebrow">TELEGRAM</p>
+        <p class="eyebrow" id="connection-source">TELEGRAM</p>
         <h1>Payment Monitor</h1>
       </div>
       <div id="connection-badge" class="status-pill status-offline" role="status" aria-live="polite">
         <span class="status-dot" aria-hidden="true"></span>
         <span id="connection-label">Disconnected</span>
       </div>
+    </section>
+
+    <section id="remote-access-card" class="sign-in-card" aria-labelledby="remote-access-heading" hidden>
+      <h2 id="remote-access-heading">Connect to your Windows PC</h2>
+      <p class="message">Enter your private dashboard access key. It is kept only in this browser tab and is not part of the public website.</p>
+      <form id="remote-access-form">
+        <label for="remote-access-key">Private access key</label>
+        <input id="remote-access-key" name="access-key" type="password" autocomplete="off" minlength="32" required>
+        <div class="auth-actions">
+          <button id="connect-button" class="button button-primary" type="submit">Connect</button>
+          <button id="forget-key-button" class="button button-secondary" type="button" hidden>Forget key</button>
+        </div>
+      </form>
+      <p class="message message-warning">Anyone with this key can read your payment history. Share it only with your own devices.</p>
     </section>
 
     <section class="controls-card" aria-label="Listener controls">
@@ -49,12 +66,16 @@
         </svg>
         <span>Stop Listening</span>
       </button>
+      <button id="speaker-toggle" class="button button-secondary" type="button" aria-pressed="false">
+        <span id="speaker-label">Speaker Off</span>
+      </button>
     </section>
 
     <p id="listener-message" class="message" role="status" aria-live="polite" hidden></p>
     <p id="service-message" class="message message-error" role="alert" hidden></p>
+    <p id="sync-status" class="message" role="status" aria-live="polite" hidden></p>
 
-    <article class="payment-card" aria-labelledby="last-payment-heading">
+    <article id="last-payment-card" class="payment-card" aria-labelledby="last-payment-heading">
       <div class="payment-card-heading">
         <span class="payment-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" focusable="false">
@@ -92,11 +113,21 @@
         </dl>
       </div>
     </article>
+
+    <section class="history-card" aria-labelledby="history-heading">
+      <div class="payment-card-heading">
+        <div>
+          <p class="eyebrow">RECENT ACTIVITY</p>
+          <h2 id="history-heading">Recent payments</h2>
+        </div>
+      </div>
+      <p id="history-empty" class="waiting-message">Connect to load payment history.</p>
+      <ol id="payment-history" class="payment-history" aria-live="polite"></ol>
+    </section>
   </main>
 
   <footer>
-    The listener and payment history stay on this Windows computer.
-    GitHub Pages cannot connect to this private local service.
+    Telegram and full history stay on this Windows computer. The phone reads this PC through its protected HTTPS tunnel; no Telegram credentials or cloud account are used on the phone.
   </footer>
 </body>
 </html>
