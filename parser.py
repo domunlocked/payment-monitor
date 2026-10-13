@@ -28,6 +28,7 @@ _PAYMENT = re.compile(
 class Payment:
     currency: str
     amount: str
+    payment_status: str
     customer_name: str
     account_suffix: str | None
     payment_method: str
@@ -69,6 +70,7 @@ def parse_payment_message(message: str) -> Payment | None:
     return Payment(
         currency=currency,
         amount=format(amount, "f"),
+        payment_status="Paid",
         customer_name=customer_name,
         account_suffix=fields["suffix"],
         payment_method=payment_method,

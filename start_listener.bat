@@ -2,18 +2,18 @@
 setlocal
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
-    echo Dependencies are not installed. Run install.bat first.
+    echo The project Python environment is missing. Run install.bat first.
     pause
     exit /b 1
 )
 if not exist ".env" (
-    echo The .env file is missing. Run install.bat, then edit .env.
+    echo The local .env file is missing. Run install.bat, then configure .env.
     pause
     exit /b 1
 )
 ".venv\Scripts\python.exe" listener.py
 if errorlevel 1 (
     echo.
-    echo The listener stopped with an error. Check the message above and logs\listener.log.
+    echo Payment Monitor stopped with an error. Review logs\listener.log.
     pause
 )

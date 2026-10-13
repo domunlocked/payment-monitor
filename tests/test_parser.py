@@ -11,6 +11,7 @@ def test_parses_usd_and_optional_bank_details() -> None:
     assert payment.to_dict() == {
         "currency": "USD",
         "amount": "12.50",
+        "payment_status": "Paid",
         "customer_name": "TEST CUSTOMER",
         "account_suffix": "844",
         "payment_method": "ABA KHQR",
@@ -31,6 +32,7 @@ def test_parses_khr_commas_case_and_missing_optional_bank() -> None:
     assert payment is not None
     assert payment.currency == "KHR"
     assert payment.amount == "50000"
+    assert payment.payment_status == "Paid"
     assert payment.customer_name == "Example Customer"
     assert payment.account_suffix == "721"
     assert payment.bank_name is None

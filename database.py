@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 _COLUMNS = (
-    "id, currency, amount, customer_name, account_suffix, payment_method, "
+    "id, currency, amount, payment_status, customer_name, account_suffix, payment_method, "
     "bank_name, merchant_name, payment_datetime, transaction_id, approval_code, "
     "received_at"
 )
@@ -39,6 +39,7 @@ class PaymentDatabase:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     currency TEXT NOT NULL CHECK(currency IN ('USD', 'KHR')),
                     amount TEXT NOT NULL,
+                    payment_status TEXT,
                     customer_name TEXT NOT NULL,
                     account_suffix TEXT,
                     payment_method TEXT NOT NULL,
@@ -51,20 +52,22 @@ class PaymentDatabase:
                 )
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(payments)").fetchall()
+            }
+            if "payment_status" not in columns:
+                connection.execute("ALTER TABLE payments ADD COLUMN payment_status TEXT")
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_payments_received_at "
                 "ON payments(received_at)"
             )
-            cutoff = (
-                datetime.now(timezone.utc) - timedelta(days=self.retention_days)
-            ).isoformat(timespec="seconds")
-            connection.execute("DELETE FROM payments WHERE received_at < ?", (cutoff,))
 
     def add_payment(self, payment: dict[str, Any]) -> bool:
         """Insert one payment, returning False if its transaction ID already exists."""
         received_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         values = {key: payment.get(key) for key in (
-            "currency", "amount", "customer_name", "account_suffix",
+            "currency", "amount", "payment_status", "customer_name", "account_suffix",
             "payment_method", "bank_name", "merchant_name", "payment_datetime",
             "transaction_id", "approval_code",
         )}
@@ -74,11 +77,11 @@ class PaymentDatabase:
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO payments (
-                    currency, amount, customer_name, account_suffix, payment_method,
+                    currency, amount, payment_status, customer_name, account_suffix, payment_method,
                     bank_name, merchant_name, payment_datetime, transaction_id,
                     approval_code, received_at
                 ) VALUES (
-                    :currency, :amount, :customer_name, :account_suffix,
+                    :currency, :amount, :payment_status, :customer_name, :account_suffix,
                     :payment_method, :bank_name, :merchant_name, :payment_datetime,
                     :transaction_id, :approval_code, :received_at
                 )

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import re
-from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -14,11 +13,10 @@ load_dotenv(PROJECT_DIR / ".env")
 
 @dataclass(frozen=True)
 class Settings:
-    api_id: int
-    api_hash: str
-    chat_id: int | str
+    api_id: int | None
+    api_hash: str | None
+    chat_id: int | str | None
     api_token: str
-    cors_origins: tuple[str, ...]
     api_host: str
     api_port: int
     database_path: Path
@@ -28,24 +26,34 @@ class Settings:
     logs_path: Path
 
 
-def get_settings() -> Settings:
-    """Read required secrets and options without logging their values."""
+def get_settings(
+    *, require_telegram: bool = False, require_chat: bool = True
+) -> Settings:
+    """Read local settings and optionally require Telegram listener configuration."""
     raw_id = os.getenv("TELEGRAM_API_ID", "").strip()
     api_hash = os.getenv("TELEGRAM_API_HASH", "").strip()
     raw_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     token = os.getenv("API_TOKEN", "").strip()
-    if not raw_id or not api_hash or not raw_chat_id:
-        raise ValueError(
-            "Set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_CHAT_ID in .env."
-        )
-    try:
-        api_id = int(raw_id)
-    except ValueError as exc:
-        raise ValueError("TELEGRAM_API_ID must be a number.") from exc
-    if api_id <= 0:
-        raise ValueError("TELEGRAM_API_ID must be a positive number.")
-    if len(api_hash) < 20:
+    api_id: int | None = None
+    if raw_id:
+        try:
+            api_id = int(raw_id)
+        except ValueError as exc:
+            raise ValueError("TELEGRAM_API_ID must be a number.") from exc
+        if api_id <= 0:
+            raise ValueError("TELEGRAM_API_ID must be a positive number.")
+    if api_hash and len(api_hash) < 20:
         raise ValueError("TELEGRAM_API_HASH does not look valid; check your .env file.")
+    if require_telegram:
+        missing = []
+        if api_id is None:
+            missing.append("TELEGRAM_API_ID")
+        if not api_hash:
+            missing.append("TELEGRAM_API_HASH")
+        if require_chat and not raw_chat_id:
+            missing.append("TELEGRAM_CHAT_ID")
+        if missing:
+            raise ValueError(f"Set {', '.join(missing)} in .env before starting Telegram.")
     if len(token) < 32 or token == "replace-this-with-a-private-random-token":
         raise ValueError(
             "Set API_TOKEN to a private random value of at least 32 characters."
@@ -59,8 +67,13 @@ def get_settings() -> Settings:
         raise ValueError("API_PORT and RETENTION_DAYS must be whole numbers.") from exc
     if not 1 <= api_port <= 65535:
         raise ValueError("API_PORT must be between 1 and 65535.")
+    if api_port != 8765:
+        raise ValueError("API_PORT must be 8765 for the local dashboard.")
     if retention_days < 1:
         raise ValueError("RETENTION_DAYS must be at least 1.")
+    api_host = os.getenv("API_HOST", "127.0.0.1").strip()
+    if api_host != "127.0.0.1":
+        raise ValueError("API_HOST must be 127.0.0.1; public and LAN binds are disabled.")
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL.")
@@ -68,40 +81,20 @@ def get_settings() -> Settings:
     database_path = Path(os.getenv("DATABASE_PATH", "payment_history.sqlite3"))
     if not database_path.is_absolute():
         database_path = PROJECT_DIR / database_path
-    cors_origins = tuple(
-        origin.strip().rstrip("/")
-        for origin in os.getenv("CORS_ORIGINS", "").split(",")
-        if origin.strip()
-    )
-    for origin in cors_origins:
-        parsed_origin = urlsplit(origin)
-        if (
-            origin == "*"
-            or parsed_origin.scheme not in {"http", "https"}
-            or not parsed_origin.netloc
-            or parsed_origin.username
-            or parsed_origin.password
-            or parsed_origin.path
-            or parsed_origin.query
-            or parsed_origin.fragment
-        ):
-            raise ValueError(
-                "CORS_ORIGINS must contain exact HTTP(S) origins only; wildcards and paths are not allowed."
-            )
-    chat_id: int | str = raw_chat_id
-    try:
-        chat_id = int(raw_chat_id)
-    except ValueError:
-        if not raw_chat_id.startswith("@"):
-            chat_id = f"@{raw_chat_id}"
+    chat_id: int | str | None = raw_chat_id or None
+    if raw_chat_id:
+        try:
+            chat_id = int(raw_chat_id)
+        except ValueError:
+            if not raw_chat_id.startswith("@"):
+                chat_id = f"@{raw_chat_id}"
 
     return Settings(
         api_id=api_id,
         api_hash=api_hash,
         chat_id=chat_id,
         api_token=token,
-        cors_origins=cors_origins,
-        api_host=os.getenv("API_HOST", "127.0.0.1").strip(),
+        api_host=api_host,
         api_port=api_port,
         database_path=database_path,
         retention_days=retention_days,

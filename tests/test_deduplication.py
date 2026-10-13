@@ -61,7 +61,7 @@ def test_csv_export_escapes_formula_like_customer_values(tmp_path) -> None:
     assert "'=HYPERLINK(" in database.export_csv()
 
 
-def test_retention_is_applied_after_database_restart(tmp_path) -> None:
+def test_expired_payment_is_preserved_when_database_restarts(tmp_path) -> None:
     path = tmp_path / "history.sqlite3"
     database = PaymentDatabase(path, retention_days=1)
     database.add_payment(PAYMENT)
@@ -72,4 +72,72 @@ def test_retention_is_applied_after_database_restart(tmp_path) -> None:
         )
 
     restarted = PaymentDatabase(path, retention_days=1)
-    assert restarted.latest() == (0, [])
+    _, rows = restarted.latest()
+    assert len(rows) == 1
+    assert rows[0]["transaction_id"] == PAYMENT["transaction_id"]
+
+
+def test_retention_is_applied_when_a_payment_is_added(tmp_path) -> None:
+    path = tmp_path / "history.sqlite3"
+    database = PaymentDatabase(path, retention_days=1)
+    database.add_payment(PAYMENT)
+    old_date = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE payments SET received_at = ?", (old_date,))
+
+    newer = dict(PAYMENT, transaction_id="100000000000003")
+    assert database.add_payment(newer) is True
+    _, rows = database.latest()
+    assert [row["transaction_id"] for row in rows] == [newer["transaction_id"]]
+
+
+def test_existing_database_is_migrated_without_losing_payment_rows(tmp_path) -> None:
+    path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                currency TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                customer_name TEXT NOT NULL,
+                account_suffix TEXT,
+                payment_method TEXT NOT NULL,
+                bank_name TEXT,
+                merchant_name TEXT NOT NULL,
+                payment_datetime TEXT NOT NULL,
+                transaction_id TEXT NOT NULL UNIQUE,
+                approval_code TEXT NOT NULL,
+                received_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO payments (
+                currency, amount, customer_name, account_suffix, payment_method,
+                bank_name, merchant_name, payment_datetime, transaction_id,
+                approval_code, received_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                PAYMENT["currency"],
+                PAYMENT["amount"],
+                PAYMENT["customer_name"],
+                PAYMENT["account_suffix"],
+                PAYMENT["payment_method"],
+                PAYMENT["bank_name"],
+                PAYMENT["merchant_name"],
+                PAYMENT["payment_datetime"],
+                PAYMENT["transaction_id"],
+                PAYMENT["approval_code"],
+                "2026-10-13T00:00:00+00:00",
+            ),
+        )
+
+    database = PaymentDatabase(path)
+    _, rows = database.latest(limit=1)
+    assert len(rows) == 1
+    assert rows[0]["transaction_id"] == PAYMENT["transaction_id"]
+    assert rows[0]["payment_status"] is None
+    assert database.add_payment(PAYMENT) is False

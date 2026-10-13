@@ -21,3 +21,4 @@ logs/
 Thumbs.db
 .env.*
 !.env.example
+*.local-backup.*
