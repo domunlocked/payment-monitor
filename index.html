@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#10284a">
+  <meta name="theme-color" content="#f7f9fc">
   <meta name="description" content="A private, local-first ABA KHQR payment dashboard and Khmer voice announcer.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>DomZzz-Payment Speaker</title>
@@ -12,38 +12,53 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="./" aria-label="DomZzz-Payment Speaker home">
-      <span class="brand-icon" aria-hidden="true">◖))</span>
-      <span><strong>DomZzz-Payment Speaker</strong><small>ABA KHQR · local-first</small></span>
-    </a>
-    <label class="language-picker"><span data-i18n="language">Language</span>
-      <select id="language-select" aria-label="Dashboard language">
-        <option value="en">English</option>
-        <option value="km">ខ្មែរ</option>
-      </select>
-    </label>
+    <div class="topbar-inner">
+      <a class="brand" href="./" aria-label="DomZzz-Payment Speaker home">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 10v4h4l5 4V6l-5 4H4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 9a5 5 0 0 1 0 6m2.5-8.5a8.5 8.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-copy"><strong>DomZzz-Payment Speaker</strong><small>ABA KHQR <span aria-hidden="true">·</span> local-first</small></span>
+      </a>
+      <div class="header-actions">
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+          <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 15.4A8.6 8.6 0 0 1 8.6 3.8a8.6 8.6 0 1 0 11.6 11.6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <label class="language-picker"><span data-i18n="language">Language</span>
+          <select id="language-select" aria-label="Dashboard language">
+            <option value="en">English</option>
+            <option value="km">ខ្មែរ</option>
+          </select>
+        </label>
+      </div>
+    </div>
   </header>
 
   <main class="dashboard">
     <section class="intro">
       <div>
-        <p class="eyebrow" data-i18n="eyebrow">PAYMENT MONITOR</p>
+        <p class="eyebrow"><span class="eyebrow-mark" aria-hidden="true"></span><span data-i18n="eyebrow">PAYMENT MONITOR</span></p>
         <h1 data-i18n="heading">Your payments, spoken in Khmer.</h1>
         <p class="subheading" data-i18n="subheading">Private payment monitoring from your own Windows computer.</p>
       </div>
       <div id="connection-badge" class="status-pill status-offline" role="status" aria-live="polite">
-        <span class="status-dot"></span><span id="connection-label">Disconnected</span>
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-copy"><span class="status-kicker" data-i18n="telegramStatus">TELEGRAM STATUS</span><span id="connection-label">Disconnected</span></span>
       </div>
     </section>
 
     <section class="summary-grid" aria-label="Payment and audio status">
       <article class="card latest-card">
-        <div class="card-heading"><span data-i18n="latestPayment">Latest payment</span><span class="card-icon" aria-hidden="true">↙</span></div>
+        <div class="card-heading"><span data-i18n="latestPayment">Latest payment</span><span class="card-icon payment-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span></div>
         <div id="latest-amount" class="latest-amount">—</div>
         <div id="latest-caption" class="muted" data-i18n="noPayments">No payment received yet</div>
       </article>
       <article class="card speaker-card">
-        <div class="card-heading"><span data-i18n="speakerStatus">Speaker</span><span id="speaker-icon" class="card-icon speaker-icon" aria-hidden="true">◖))</span></div>
+        <div class="card-heading"><span data-i18n="speakerStatus">Speaker</span><span id="speaker-icon" class="card-icon speaker-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 10v4h4l5 4V6l-5 4H4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 9a5 5 0 0 1 0 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span></div>
         <div id="speaker-label" class="speaker-label" role="status" aria-live="polite">Audio is off</div>
         <div id="voice-label" class="muted">Khmer voice not checked</div>
       </article>
@@ -52,7 +67,7 @@
     <section class="card controls-card" aria-labelledby="controls-heading">
       <div class="section-heading">
         <div><p class="eyebrow" data-i18n="deviceControls">THIS DEVICE</p><h2 id="controls-heading" data-i18n="audioControls">Audio controls</h2></div>
-        <span id="queue-count" class="queue-badge" aria-live="polite">0 queued</span>
+        <span id="queue-count" class="queue-badge" aria-live="polite"><span class="queue-dot" aria-hidden="true"></span>0 queued</span>
       </div>
       <div class="button-row">
         <button id="enable-audio" class="button button-primary" type="button" data-i18n="enableAudio">Enable audio</button>
@@ -74,7 +89,7 @@
       <p id="audio-message" class="notice" role="status" aria-live="polite" data-i18n="audioHint">Audio plays only when this device has an installed Khmer voice, the browser permits speech, and the device is not muted.</p>
     </section>
 
-    <section class="card payments-card" aria-labelledby="payments-heading">
+    <section id="payments-section" class="card payments-card" aria-labelledby="payments-heading" aria-busy="false">
       <div class="section-heading payments-heading">
         <div><p class="eyebrow" data-i18n="history">HISTORY</p><h2 id="payments-heading" data-i18n="recentPayments">Recent payments</h2></div>
         <div id="filter-group" class="filter-group" role="group" aria-label="Filter payments by currency">
@@ -84,7 +99,9 @@
         </div>
       </div>
       <div id="payments-empty" class="empty-state">
-        <span class="empty-icon" aria-hidden="true">◷</span>
+        <span class="empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h10A2.25 2.25 0 0 1 19.25 6v14.25H4.75V6A2.25 2.25 0 0 1 7 3.75Z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8m-8 4h8m-8 4h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
         <strong data-i18n="waiting">Waiting for a new payment</strong>
         <span data-i18n="waitingHint">Connect your local listener to show real payment notifications here.</span>
       </div>
@@ -101,7 +118,7 @@
       <p id="filter-empty" class="muted filter-empty" hidden data-i18n="noMatchingPayments">No payments match this currency filter.</p>
     </section>
 
-    <details class="card settings-card" open>
+    <details class="card settings-card">
       <summary><span><span class="eyebrow" data-i18n="connection">CONNECTION</span><strong data-i18n="connectListener">Connect to your listener</strong></span><span aria-hidden="true">⌄</span></summary>
       <p class="settings-description" data-i18n="connectionHelp">The Python listener stays on your Windows computer. Enter its private API address and the token from your local .env file.</p>
       <form id="connection-form">

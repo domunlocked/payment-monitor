@@ -4,6 +4,7 @@
   const translations = {
     en: {
       language: "Language", eyebrow: "PAYMENT MONITOR", heading: "Your payments, spoken in Khmer.",
+      telegramStatus: "TELEGRAM STATUS",
       subheading: "Private payment monitoring from your own Windows computer.", latestPayment: "Latest payment",
       noPayments: "No payment received yet", speakerStatus: "Speaker", deviceControls: "THIS DEVICE",
       audioControls: "Audio controls", enableAudio: "Enable audio", pauseAnnouncements: "Pause announcements",
@@ -18,7 +19,9 @@
       apiAddress: "Listener API address", apiToken: "Private API token", connect: "Connect",
       forgetToken: "Forget saved token", privacyHint: "Your API token is stored only in this browser's local storage. Never share it or commit it to GitHub.",
       footer: "GitHub Pages hosts this static dashboard; your private listener and database stay on your computer.",
-      connected: "Connected", disconnected: "Disconnected", connectionError: "Error", audioOff: "Audio is off",
+      connected: "Connected", disconnected: "Disconnected", connecting: "Connecting…", connectionError: "Error", audioOff: "Audio is off",
+      switchToDark: "Switch to dark mode", switchToLight: "Switch to light mode",
+      checkingListener: "Checking listener…",
       audioReady: "Khmer voice ready", audioPaused: "Announcements paused", voiceMissing: "No Khmer voice is available on this device.",
       voiceTestOk: "Khmer sample spoken.", voiceTestFailed: "The browser could not speak the Khmer sample.",
       apiFailed: "Could not connect. Check the listener, API address, token, and CORS_ORIGINS setting.",
@@ -35,6 +38,7 @@
     },
     km: {
       language: "ភាសា", eyebrow: "តាមដានការទូទាត់", heading: "ស្តាប់ការទូទាត់ជាភាសាខ្មែរ។",
+      telegramStatus: "ស្ថានភាព TELEGRAM",
       subheading: "តាមដានការទូទាត់ដោយឯកជនពីកុំព្យូទ័រ Windows របស់អ្នក។", latestPayment: "ការទូទាត់ចុងក្រោយ",
       noPayments: "មិនទាន់មានការទូទាត់ទេ", speakerStatus: "ឧបករណ៍បំពងសំឡេង", deviceControls: "ឧបករណ៍នេះ",
       audioControls: "ការគ្រប់គ្រងសំឡេង", enableAudio: "បើកសំឡេង", pauseAnnouncements: "ផ្អាកការប្រកាស",
@@ -49,7 +53,9 @@
       apiAddress: "អាសយដ្ឋាន API", apiToken: "Token API ឯកជន", connect: "ភ្ជាប់",
       forgetToken: "លុប token ដែលបានរក្សាទុក", privacyHint: "Token API ត្រូវបានរក្សាទុកតែក្នុង browser នេះប៉ុណ្ណោះ។ កុំចែករំលែក ឬបញ្ចូលវាទៅ GitHub។",
       footer: "GitHub Pages ផ្ទុកផ្ទាំងគ្រប់គ្រងឋិតិវន្តនេះ។ កម្មវិធីស្តាប់ឯកជន និងមូលដ្ឋានទិន្នន័យនៅលើកុំព្យូទ័ររបស់អ្នក។",
-      connected: "បានតភ្ជាប់", disconnected: "មិនបានតភ្ជាប់", connectionError: "មានបញ្ហា", audioOff: "បានបិទសំឡេង",
+      connected: "បានតភ្ជាប់", disconnected: "មិនបានតភ្ជាប់", connecting: "កំពុងតភ្ជាប់…", connectionError: "មានបញ្ហា", audioOff: "បានបិទសំឡេង",
+      switchToDark: "ប្តូរទៅមុខងារងងឹត", switchToLight: "ប្តូរទៅមុខងារភ្លឺ",
+      checkingListener: "កំពុងពិនិត្យកម្មវិធីស្តាប់…",
       audioReady: "សំឡេងខ្មែររួចរាល់", audioPaused: "បានផ្អាកការប្រកាស", voiceMissing: "មិនមានសំឡេងខ្មែរនៅលើឧបករណ៍នេះទេ។",
       voiceTestOk: "បាននិយាយប្រយោគសាកល្បងជាខ្មែរ។", voiceTestFailed: "កម្មវិធីរុករកមិនអាចនិយាយប្រយោគខ្មែរបានទេ។",
       apiFailed: "មិនអាចភ្ជាប់បាន។ សូមពិនិត្យកម្មវិធីស្តាប់ អាសយដ្ឋាន API token និង CORS_ORIGINS។",
@@ -70,7 +76,9 @@
   const $ = (id) => document.getElementById(id);
   const configKey = "domzz-payment-speaker.config.v1";
   const languageKey = "domzz-payment-speaker.language";
+  const themeKey = "domzz-payment-speaker.theme";
   let language = localStorage.getItem(languageKey) || "en";
+  let theme = localStorage.getItem(themeKey) === "dark" ? "dark" : "light";
   let apiUrl = "";
   let apiToken = "";
   let apiAuthorized = false;
@@ -96,7 +104,7 @@
     connectionStatus = state;
     const badge = $("connection-badge");
     badge.className = `status-pill status-${state}`;
-    $("connection-label").textContent = state === "connected" ? t("connected") : state === "error" ? t("connectionError") : t("disconnected");
+    $("connection-label").textContent = state === "connected" ? t("connected") : state === "error" ? t("connectionError") : state === "loading" ? t("connecting") : t("disconnected");
   };
   const sortedRecent = () => [...payments].sort((a, b) => b.id - a.id).slice(0, 100);
   const paymentTime = (payment) => {
@@ -108,6 +116,16 @@
     localStorage.setItem(stateKey, JSON.stringify(storedState));
     $("queue-count").textContent = `${storedState.queue.length} ${t("announcementsQueue")}`;
   };
+
+  function setTheme(nextTheme) {
+    theme = nextTheme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#0d1420" : "#f7f9fc";
+    const label = t(theme === "dark" ? "switchToLight" : "switchToDark");
+    $("theme-toggle").setAttribute("aria-label", label);
+    $("theme-toggle").title = label;
+    localStorage.setItem(themeKey, theme);
+  }
 
   function setLanguage(next) {
     language = next === "km" ? "km" : "en";
@@ -124,6 +142,7 @@
     document.querySelector(".summary-grid").setAttribute("aria-label", t("paymentAudioStatus"));
     $("voice-select").setAttribute("aria-label", t("khmerVoice"));
     $("filter-group")?.setAttribute("aria-label", t("filterCurrencies"));
+    $("payments-section").setAttribute("aria-label", t("recentPayments"));
     $("pause-audio").textContent = paused ? t("resumeAnnouncements") : t("pauseAnnouncements");
     $("speaker-label").textContent = paused ? t("audioPaused") : audioEnabled ? t("audioReady") : t("audioOff");
     $("queue-count").textContent = `${storedState.queue.length} ${t("announcementsQueue")}`;
@@ -139,6 +158,7 @@
     for (const payment of visible) {
       const row = document.createElement("tr");
       const amount = document.createElement("td");
+      amount.dataset.label = t("amount");
       amount.className = "amount-cell";
       amount.textContent = Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: payment.currency === "USD" && payment.amount.includes(".") ? 2 : 0, maximumFractionDigits: 2 });
       const currency = document.createElement("span");
@@ -146,12 +166,16 @@
       currency.textContent = payment.currency;
       amount.append(currency);
       const customer = document.createElement("td");
+      customer.dataset.label = t("customer");
       customer.textContent = payment.customer_name;
       const method = document.createElement("td");
+      method.dataset.label = t("method");
       method.textContent = payment.bank_name ? `${payment.payment_method} · ${payment.bank_name}` : payment.payment_method;
       const received = document.createElement("td");
+      received.dataset.label = t("time");
       received.textContent = paymentTime(payment);
       const transaction = document.createElement("td");
+      transaction.dataset.label = t("transaction");
       transaction.textContent = payment.transaction_id;
       row.append(amount, customer, method, received, transaction);
       tbody.append(row);
@@ -306,6 +330,7 @@
   async function refresh() {
     if (!apiUrl || !apiToken || polling) return;
     polling = true;
+    $("payments-section").setAttribute("aria-busy", "true");
     try {
       const statusResponse = await request("/api/status");
       const status = await statusResponse.json();
@@ -338,6 +363,7 @@
       $("global-error").hidden = false;
     } finally {
       polling = false;
+      $("payments-section").setAttribute("aria-busy", "false");
     }
   }
 
@@ -374,7 +400,8 @@
     localStorage.setItem(configKey, JSON.stringify({ apiUrl, apiToken }));
     $("api-url").value = apiUrl;
     $("api-token").value = apiToken;
-    setMessage($("connection-message"), t("privacyHint"));
+    setConnection("loading");
+    setMessage($("connection-message"), t("checkingListener"));
     renderPayments();
     void refresh();
     if (pollHandle) clearInterval(pollHandle);
@@ -402,6 +429,7 @@
     renderPayments();
   });
   $("language-select").addEventListener("change", (event) => setLanguage(event.target.value));
+  $("theme-toggle").addEventListener("click", () => setTheme(theme === "dark" ? "light" : "dark"));
   $("voice-select").addEventListener("change", () => {
     const voice = getSelectedVoice();
     if (voice) localStorage.setItem("domzz-payment-speaker.voice", voice.lang);
@@ -466,6 +494,7 @@
   }));
   if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", chooseKhmerVoices);
   chooseKhmerVoices();
+  setTheme(theme);
   setLanguage(language);
   $("api-url").value = currentApiDefault();
   try {
