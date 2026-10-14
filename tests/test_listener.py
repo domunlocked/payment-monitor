@@ -1,10 +1,12 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from config import Settings
 from database import PaymentDatabase
+import listener
 from listener import TelegramListenerManager
 
 
@@ -129,6 +131,16 @@ def test_process_lock_prevents_a_second_service_instance(tmp_path) -> None:
     second.release()
 
 
+def test_configuration_errors_are_written_to_local_startup_log(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(listener, "PROJECT_DIR", tmp_path)
+
+    listener.log_configuration_error("Missing TELEGRAM_CHAT_ID.")
+
+    assert (tmp_path / "logs" / "startup.log").read_text(encoding="utf-8") == (
+        "Configuration error: Missing TELEGRAM_CHAT_ID.\n"
+    )
+
+
 def test_missing_telegram_settings_are_reported_without_starting_client(tmp_path) -> None:
     made_client = False
 
@@ -207,3 +219,114 @@ def test_new_event_keeps_source_message_ids_for_duplicate_protection(tmp_path) -
     assert payment["source_message_id"] == "77"
     assert len(payments) == 1
     assert payment["transaction_id"] == "100000000000077"
+
+
+def test_listener_reconnects_after_telegram_disconnect(tmp_path, monkeypatch) -> None:
+    clients = []
+    second_connection = asyncio.Event()
+    real_sleep = asyncio.sleep
+
+    class DisconnectOnceClient(FakeTelegramClient):
+        async def run_until_disconnected(self) -> None:
+            if len(clients) == 1:
+                return
+            second_connection.set()
+            await self.disconnect_event.wait()
+
+    def make_client(*_args, **_kwargs):
+        client = DisconnectOnceClient()
+        clients.append(client)
+        return client
+
+    async def fast_retry(_delay: float) -> None:
+        await real_sleep(0)
+
+    monkeypatch.setattr(listener.asyncio, "sleep", fast_retry)
+
+    async def run() -> dict:
+        manager = TelegramListenerManager(
+            settings(tmp_path),
+            PaymentDatabase(tmp_path / "history.sqlite3"),
+            client_factory=make_client,
+        )
+        await manager.start()
+        await asyncio.wait_for(second_connection.wait(), timeout=1)
+        status = manager.status()
+        await manager.stop()
+        return status
+
+    status = asyncio.run(run())
+    assert len(clients) >= 2
+    assert status["listener_state"] == "connected"
+    assert status["telegram_connected"] is True
+
+
+def test_local_listener_controls_use_signed_cookie_without_sending_api_token(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    settings_value = settings(tmp_path)
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def __init__(self, result):
+            self.result = result
+
+        def read(self):
+            return json.dumps(self.result).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse(
+            {
+                "listener_state": "stopped",
+                "listener_running": False,
+                "telegram_connected": False,
+                "message": "Listener is stopped.",
+            }
+        )
+
+    monkeypatch.setattr(listener, "urlopen", fake_urlopen)
+    assert listener.control_local_listener(settings_value, "stop") == 0
+    output = capsys.readouterr().out
+    assert "Listener stopped" in output
+
+    request, timeout = requests[0]
+    assert request.full_url == "http://127.0.0.1:8765/api/listener/stop"
+    assert request.get_method() == "POST"
+    assert request.get_header("Origin") == "http://127.0.0.1:8765"
+    assert request.get_header("Sec-fetch-site") == "same-origin"
+    assert settings_value.api_token not in request.get_header("Cookie")
+    assert timeout == 5
+
+
+def test_local_shutdown_control_uses_protected_api_route(tmp_path, monkeypatch, capsys) -> None:
+    settings_value = settings(tmp_path)
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"status": "shutting_down"}).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(listener, "urlopen", fake_urlopen)
+    assert listener.control_local_listener(settings_value, "shutdown") == 0
+    assert "shutting down" in capsys.readouterr().out
+    request, _ = requests[0]
+    assert request.full_url == "http://127.0.0.1:8765/api/shutdown"
+    assert request.get_method() == "POST"
+    assert settings_value.api_token not in request.get_header("Cookie")

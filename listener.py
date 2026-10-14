@@ -2,12 +2,16 @@
 
 import argparse
 import asyncio
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import sys
+import webbrowser
 from typing import Any, Callable
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import uvicorn
 from telethon import TelegramClient, events
@@ -38,6 +42,82 @@ def configure_logging(settings: Settings) -> None:
     )
     logging.getLogger("uvicorn.access").disabled = True
     logging.getLogger("telethon").setLevel(logging.WARNING)
+
+
+def control_local_listener(settings: Settings, action: str) -> int:
+    """Read or control the existing loopback service without disclosing credentials."""
+    if action not in {"status", "start", "stop", "shutdown"}:
+        raise ValueError("Unsupported local listener action.")
+    from api import _issue_session
+
+    origin = f"http://{settings.api_host}:{settings.api_port}"
+    path = (
+        "/api/status"
+        if action == "status"
+        else "/api/shutdown"
+        if action == "shutdown"
+        else f"/api/listener/{action}"
+    )
+    headers = {
+        "Cookie": f"payment_monitor_session={_issue_session(settings.api_token)}",
+    }
+    method = "GET"
+    if action != "status":
+        headers.update(
+            {
+                "Origin": origin,
+                "Sec-Fetch-Site": "same-origin",
+                "Content-Type": "application/json",
+            }
+        )
+        method = "POST"
+    request = Request(f"{origin}{path}", headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=5) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        try:
+            result = json.loads(exc.read().decode("utf-8"))
+            message = result.get("detail", f"Local API returned HTTP {exc.code}.")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            message = f"Local API returned HTTP {exc.code}."
+        print(f"Listener {action} failed: {message}")
+        return 1
+    except (URLError, TimeoutError, OSError) as exc:
+        print(
+            "Payment Monitor is not responding at "
+            f"{origin} ({type(exc).__name__}). Start it with start_payment_monitor.bat "
+            "or run setup_startup.bat."
+        )
+        return 1
+
+    state = result.get("listener_state", "unknown")
+    running = result.get("listener_running") is True
+    connected = result.get("telegram_connected") is True
+    if action == "status":
+        print(f"Listener process: {'running' if running else 'not running'}")
+        print(f"Telegram connection: {'connected' if connected else 'disconnected'}")
+        print(f"State: {state}")
+    elif action == "start":
+        print(f"Listener start requested. State: {state}.")
+    elif action == "shutdown":
+        print("Local dashboard and Telegram listener are shutting down.")
+    else:
+        print(f"Listener stopped. State: {state}.")
+    if result.get("message"):
+        print(result["message"])
+    return 0
+
+
+def log_configuration_error(message: str) -> None:
+    """Record safe configuration diagnostics before normal file logging is set up."""
+    log_path = PROJECT_DIR / "logs" / "startup.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(f"Configuration error: {message}\n")
+    except OSError as exc:
+        print(f"Could not write startup error log ({type(exc).__name__}).", file=sys.stderr)
 
 
 class SingleInstanceLock:
@@ -309,7 +389,11 @@ async def _list_groups(settings: Settings) -> None:
         await client.disconnect()
 
 
-async def run_listener(settings: Settings, auto_start_listener: bool = False) -> None:
+async def run_listener(
+    settings: Settings,
+    auto_start_listener: bool = False,
+    open_dashboard: bool = False,
+) -> None:
     configure_logging(settings)
     instance_lock = SingleInstanceLock(settings.logs_path / "service.lock")
     if not instance_lock.acquire():
@@ -343,17 +427,49 @@ async def run_listener(settings: Settings, auto_start_listener: bool = False) ->
             access_log=False,
         )
     )
+    app.state.uvicorn_server = server
     logging.getLogger("payment-monitor").info(
         "Starting the local dashboard at %s.", origin
     )
     try:
-        await server.serve()
+        server_task = asyncio.create_task(server.serve())
+        if open_dashboard:
+            while not server.started and not server_task.done():
+                await asyncio.sleep(0.1)
+            if server.started:
+                opened = webbrowser.open(f"{origin}/", new=2)
+                if not opened:
+                    logging.getLogger("payment-monitor").warning(
+                        "Could not open the local dashboard automatically."
+                    )
+        await server_task
     finally:
         instance_lock.release()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    control = parser.add_mutually_exclusive_group()
+    control.add_argument(
+        "--status",
+        action="store_true",
+        help="Show status of the existing local API and Telegram listener.",
+    )
+    control.add_argument(
+        "--start",
+        action="store_true",
+        help="Start Telegram monitoring through the existing local API.",
+    )
+    control.add_argument(
+        "--stop",
+        action="store_true",
+        help="Gracefully stop Telegram monitoring without stopping the dashboard.",
+    )
+    control.add_argument(
+        "--shutdown",
+        action="store_true",
+        help="Gracefully stop Telegram monitoring and the local dashboard service.",
+    )
     parser.add_argument(
         "--login",
         action="store_true",
@@ -374,7 +490,18 @@ def main() -> int:
         action="store_true",
         help="Also start Telegram monitoring when the local API starts.",
     )
+    parser.add_argument(
+        "--open-dashboard",
+        action="store_true",
+        help="Open the local dashboard in the default browser after the API starts.",
+    )
     args = parser.parse_args()
+    if args.open_dashboard and not args.autostart:
+        parser.error("--open-dashboard requires --autostart.")
+    if (args.autostart or args.open_dashboard) and (
+        args.status or args.start or args.stop or args.shutdown
+    ):
+        parser.error("Startup options cannot be combined with a local control option.")
     if args.check_voice:
         try:
             voices = installed_khmer_voices()
@@ -395,6 +522,7 @@ def main() -> int:
         )
     except ValueError as exc:
         print(f"Configuration error: {exc}")
+        log_configuration_error(str(exc))
         return 2
 
     try:
@@ -402,8 +530,22 @@ def main() -> int:
             asyncio.run(_authorize_telegram(settings))
         elif args.list_groups:
             asyncio.run(_list_groups(settings))
+        elif args.status:
+            return control_local_listener(settings, "status")
+        elif args.start:
+            return control_local_listener(settings, "start")
+        elif args.stop:
+            return control_local_listener(settings, "stop")
+        elif args.shutdown:
+            return control_local_listener(settings, "shutdown")
         else:
-            asyncio.run(run_listener(settings, auto_start_listener=args.autostart))
+            asyncio.run(
+                run_listener(
+                    settings,
+                    auto_start_listener=args.autostart,
+                    open_dashboard=args.open_dashboard,
+                )
+            )
     except KeyboardInterrupt:
         print("\nOperation stopped.")
     except (RPCError, OSError) as exc:

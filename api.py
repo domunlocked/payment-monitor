@@ -317,6 +317,15 @@ def create_app(
             raise HTTPException(status_code=503, detail="The Telegram listener is unavailable.")
         return await listener.stop()
 
+    @app.post("/api/shutdown")
+    async def shutdown(request: Request) -> dict[str, str]:
+        authorize_change(request)
+        server = getattr(request.app.state, "uvicorn_server", None)
+        if server is None:
+            raise HTTPException(status_code=503, detail="The local server cannot be stopped safely.")
+        server.should_exit = True
+        return {"status": "shutting_down"}
+
     @app.get("/api/latest-payment")
     async def latest_payment(request: Request) -> dict[str, Any]:
         authorize(request)

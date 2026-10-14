@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -146,6 +147,25 @@ def test_start_and_stop_are_same_origin_and_keep_latest_payment(tmp_path) -> Non
     assert client.get("/api/latest-payment").json()["payment"]["transaction_id"] == PAYMENT[
         "transaction_id"
     ]
+
+
+def test_shutdown_is_local_session_protected_and_requests_graceful_exit(tmp_path) -> None:
+    client = make_client(tmp_path)
+    client.get("/")
+    server = SimpleNamespace(should_exit=False)
+    client.app.state.uvicorn_server = server
+
+    denied = client.post(
+        "/api/shutdown",
+        headers={"Origin": "https://untrusted.example", "Sec-Fetch-Site": "cross-site"},
+    )
+    assert denied.status_code == 403
+    assert server.should_exit is False
+
+    response = client.post("/api/shutdown", headers=dashboard_headers())
+    assert response.status_code == 200
+    assert response.json() == {"status": "shutting_down"}
+    assert server.should_exit is True
 
 
 def test_autostart_starts_listener_and_shutdown_stops_it(tmp_path) -> None:

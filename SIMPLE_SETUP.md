@@ -1,93 +1,93 @@
-# Simple phone access — Payment Monitor
+# Payment Monitor — Windows startup and phone dashboard
 
-**The Windows PC runs Telegram and keeps the full SQLite history.** GitHub Pages remains the dashboard. A Cloudflare Tunnel gives the PC a stable HTTPS address without router port forwarding. The phone polls the PC directly; there is no Supabase, cloud database, account login, or Telegram login on the phone.
+Your Windows PC runs the existing FastAPI dashboard, Telethon listener, parser, and SQLite database. The scheduled task runs `start_payment_monitor.bat`, which uses this project's `.venv\Scripts\python.exe` and keeps the service process attached to Task Scheduler so it can retry failures. A process lock prevents a second local service from starting.
 
-## Privacy and security
+The current application intentionally hosts the API and Telegram listener in one Python process. Telegram reconnects automatically when its network connection drops, and Task Scheduler restarts the complete app if that process exits. A process-level crash therefore restarts both; they are not isolated as separate processes.
 
-- The local API stays bound to `127.0.0.1:8765`; never change it to `0.0.0.0` or open a router port.
-- The remote tunnel serves only read-only status and payment routes. It accepts browser requests only from `https://domunlocked.github.io`, and the API requires the separate `REMOTE_ACCESS_TOKEN` from the PC's `.env` on every request.
-- The phone key is typed into the page and stored only in that browser tab's session storage. It is not included in GitHub Pages JavaScript. Use **Forget key** to clear it.
-- Anyone who obtains your key can read the remote payment fields. Treat it as a password; rotate it immediately if exposed. The key does not permit remote listener start/stop or CSV download.
-- The API shares only amount, currency, payment status, payment date/time, transaction ID, received time, and Khmer announcement. Customer name, masked account, bank, merchant, APV, Telegram credentials/session, and the full SQLite file remain on the PC.
-- Cloudflare carries the HTTPS tunnel traffic as the reverse-proxy provider. The app does not store a cloud copy, but you must trust Cloudflare to relay these API requests; a public GitHub Pages compromise could also steal a key while it is being entered. This is the trade-off for no separate dashboard account and access through the existing public website.
-- Cloudflare Tunnel has a free offering, subject to provider terms and limits. A stable custom hostname requires a domain configured in Cloudflare; a domain may cost money. Free terms are not guaranteed forever.
-- Do not enable Cloudflare Access or another login gate for the tunnel hostname: it can block browser API calls unless separately configured. The app's private access key is the intended protection.
+The phone website stays on GitHub Pages. For access from mobile data, configure the existing Cloudflare Tunnel and remote key as described below; GitHub Pages cannot reach `localhost` directly. Telegram credentials, the Telegram session file, `API_TOKEN`, and the SQLite database stay on the PC. Never put these values in website files or Git.
 
-## One-time setup
+## First-time startup installation
 
-### 1. Create a stable Cloudflare Tunnel
-
-1. Have a domain you control and add it to a Cloudflare account. Follow Cloudflare's instructions to activate its DNS. Registration/renewal of a domain can cost money.
-2. Install Cloudflare Tunnel on Windows:
+1. Finish the local setup in the existing `.env`: Telegram app ID/hash, authorized session, group ID, and valid private `API_TOKEN`. To authorize once from the PC terminal:
 
    ```powershell
-   winget install --id Cloudflare.cloudflared
+   .\.venv\Scripts\python.exe listener.py --login
+   .\.venv\Scripts\python.exe listener.py --list-groups
    ```
 
-   Close and reopen PowerShell.
-3. In the Cloudflare dashboard, open **Zero Trust → Networks → Tunnels** (menu names may change), create a named tunnel, and select the Windows connector. Add a **Published application route / Public hostname**:
-   - Hostname: `payments.YOUR-DOMAIN` (for example, `payments.example.com`)
-   - Service type: `HTTP`
-   - URL: `127.0.0.1:8765`
-   - Do not enable an Access login policy for this hostname.
-4. Use Cloudflare's displayed Windows service install command in an **Administrator PowerShell** window to install the tunnel as a Windows service. The tunnel token in that command is private: never paste it in chat, the project, or GitHub. The Cloudflared service should be configured to start automatically with Windows.
-5. Confirm the HTTPS hostname resolves to the tunnel. Do not make a router change or open port 8765 to the internet.
+   The `payment-monitor.session` file remains on this PC. Set the correct `TELEGRAM_CHAT_ID` in `.env`.
+2. From File Explorer, **double-click `setup_startup.bat` first**. It creates or replaces one current-user Task Scheduler task named `PaymentMonitorListener`, with a 30-second logon delay, no administrator permission, and restart-on-failure settings. It gracefully stops an already-running copy before starting the managed task. Re-running the installer updates the same named task; it does not create duplicates.
+3. If Windows asks whether to allow the action, approve it as your current user. The batch file uses only `.venv\Scripts\python.exe`; it does not install global packages.
+4. The dashboard opens in the default browser after sign-in. Double-click `check_listener.bat` to verify the service. Expected output includes `Listener process: running` and `Telegram connection: connected`. If Telegram is still reconnecting, the process should remain running and retry.
 
-### 2. Configure the local API and public website
+## Start immediately, check, and stop
 
-1. In this project's `.env`, keep `API_HOST=127.0.0.1` and `API_PORT=8765`. Set:
+- **Start the dashboard and Telegram listener now without changing startup settings:** double-click `start_payment_monitor.bat`. It reuses an existing service and requests Telegram start rather than opening a duplicate. To also install Windows startup and start it now, double-click `setup_startup.bat`.
+- **Check status:** double-click `check_listener.bat`. It asks the existing loopback API for listener state and connection status. It does not print credentials.
+- **Stop the complete service safely:** double-click `stop_payment_monitor.bat`. This asks the API to stop Telegram and shut down gracefully. The startup task remains installed and runs again at your next sign-in. To stop only Telegram while keeping the API dashboard open, use `stop_listener.bat`.
+- Closing the dashboard browser does not stop the listener. Closing the Task Scheduler task or shutting down Windows does.
+
+## Disable automatic startup
+
+Open PowerShell as the same Windows user and run:
+
+```powershell
+Disable-ScheduledTask -TaskName PaymentMonitorListener
+```
+
+The task stays installed but will not run on sign-in until enabled again.
+
+To re-enable later, double-click `setup_startup.bat` again. To remove the task entirely instead:
+
+```powershell
+Unregister-ScheduledTask -TaskName PaymentMonitorListener -Confirm:$false
+```
+
+These commands do not delete the database, `.env`, Telegram session, logs, or backups.
+
+## Phone dashboard and speech
+
+The remote phone view is optional and requires the existing Cloudflare Tunnel:
+
+1. In Cloudflare, configure the tunnel hostname to route to `http://127.0.0.1:8765`. The tunnel uses outbound connections; do not open router ports. A stable custom hostname needs a domain, which may cost money. Cloudflare's free plan and limits can change.
+2. Keep `API_HOST=127.0.0.1` and `API_PORT=8765` in `.env`. Configure:
 
    ```dotenv
    REMOTE_API_ORIGIN=https://payments.YOUR-DOMAIN
+   REMOTE_ACCESS_TOKEN=YOUR_SEPARATE_LONG_RANDOM_PHONE_KEY
    ```
 
-   Use only the HTTPS origin, no path or trailing slash.
-2. Generate separate fresh local and phone keys:
+   Generate a key locally with:
 
    ```powershell
-   .\.venv\Scripts\python.exe -c "import secrets; print('API_TOKEN='+secrets.token_urlsafe(48)); print('REMOTE_ACCESS_TOKEN='+secrets.token_urlsafe(48))"
+   .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
    ```
 
-   Put each printed assignment on its own line in `.env`. Keep both private. `API_TOKEN` signs local dashboard sessions and is never sent to the phone. The separate `REMOTE_ACCESS_TOKEN` grants only the remote read-only routes and is the key you enter on the phone. **Replace any previously exposed `API_TOKEN`.**
-3. Edit the public `remote-config.js` file to match the tunnel hostname:
+   Keep it only in `.env`; it is separate from `API_TOKEN`. Anyone with this read-only key can see the minimized remote payment details.
+3. Set the public HTTPS hostname (not a secret) as `apiBaseUrl` in `remote-config.js`. Publish that website configuration through the existing reviewed GitHub workflow. Do not put either token, tunnel credential, or Telegram credential in public files.
+4. Open [https://domunlocked.github.io/payment-monitor/](https://domunlocked.github.io/payment-monitor/) on the phone, enter `REMOTE_ACCESS_TOKEN`, press **Connect**, turn **Speaker On**, then tap **Start Listening**. New transactions are polled; existing history is loaded silently. A Khmer browser speech voice (`km`) is required; without one, the dashboard shows payments but does not speak. Speech cannot be guaranteed when the phone tab is suspended or closed.
 
-   ```javascript
-   window.PAYMENT_MONITOR_REMOTE = Object.freeze({
-     apiBaseUrl: "https://payments.YOUR-DOMAIN"
-   });
-   ```
+When the PC or tunnel is offline, the phone reports disconnected and retries. Local payment records remain in the PC's existing SQLite database; there is no cloud database or history upload.
 
-   The hostname is public configuration. Never put either key or the Cloudflare tunnel token in this file.
-4. Review changes and run the tests before publishing. Push only reviewed project source to the existing `main` branch (never force-push). GitHub Pages deploys the static dashboard through the existing Actions workflow. Do not publish `.env`, tunnel credentials, Telegram session, database, logs, or backups.
+## Troubleshooting
 
-## Start the PC and use your phone
+- **Task installed but listener not running:** double-click `check_listener.bat`; open Task Scheduler → Task Scheduler Library → `PaymentMonitorListener` and check Last Run Result. Check `logs\listener.log` and `logs\console.log`. Logs should contain error types/status only, not tokens.
+- **Telegram says setup required:** check the named variables in local `.env`. Do not paste `.env` or logs in chat.
+- **Needs one-time login:** run `.\.venv\Scripts\python.exe listener.py --login` in a normal local terminal. Login codes are entered on the PC only.
+- **Task cannot be created:** confirm you are signed in as the Windows user that should run the app, then retry `setup_startup.bat`. It is a current-user task and normally needs no administrator permission.
+- **Task reports running but Telegram disconnected:** the listener is retrying. Check internet access, Telegram availability, the group ID, and the private listener log.
+- **Task will not start another copy:** the project lock is intentional. Check the existing dashboard at `http://127.0.0.1:8765/`; it may already be running. Use `check_listener.bat`.
+- **Phone cannot connect:** confirm the Cloudflare service is running and that `.env` `REMOTE_API_ORIGIN` matches public `remote-config.js`. Keep the local API bound to loopback.
+- Keep `.env`, `payment-monitor.session`, SQLite files, logs, Cloudflare tunnel credentials, and backups out of GitHub. The repository `.gitignore` excludes local private data.
 
-1. Start/confirm the `cloudflared` Windows service, then double-click `start_payment_monitor.bat`. The script starts the local API/listener service once and attempts to start the tunnel service if installed. Local monitoring can still run if the tunnel is offline.
-2. On the PC, open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and press **Start Listening** if Telegram is not already connected.
-3. On the phone (Wi-Fi or mobile data), open [https://domunlocked.github.io/payment-monitor/](https://domunlocked.github.io/payment-monitor/).
-4. Enter `REMOTE_ACCESS_TOKEN` from the PC `.env`, then press **Connect**. The key is held only in that tab's session storage. Tap **Forget key** to clear it.
-5. Tap **Speaker On**, then tap **Start Listening**. The initial history loads silently; only later payment IDs can be spoken. Polling runs about every 2.5 seconds, and reconnects resume from the last seen ID without replaying old records.
-6. The phone must have a genuine Khmer (`km`) SpeechSynthesis voice for Khmer speech. If it does not, payments still show but are not spoken; English is not used as a substitute. Keep the page open and awake. Mobile browsers may suspend polling/speech in background tabs or after closing the page.
+## Automated checks
 
-To start Payment Monitor automatically when your Windows account signs in, run `install_autostart.bat`; use `remove_autostart.bat` to uninstall that shortcut. The separately installed Cloudflared Windows service starts independently.
-
-## Offline and troubleshooting
-
-- **PC online** means the remote API responded. The badge separately reports Telegram connection. If the PC, internet, or tunnel is offline, the phone reports a disconnect and retries automatically; local payment history remains on the PC.
-- **Key rejected (401):** verify the value entered on the phone matches `REMOTE_ACCESS_TOKEN` in the PC `.env`. If in doubt, generate a new remote key, update `.env`, restart Payment Monitor, and enter the new key.
-- **Browser CORS/403:** ensure `REMOTE_API_ORIGIN` in `.env`, the Cloudflare hostname, and `apiBaseUrl` in `remote-config.js` match exactly. The site allows only `https://domunlocked.github.io`; private browsing extensions/content blockers can interfere.
-- **Tunnel offline:** check that the Cloudflared Windows service is running and its dashboard route points to `http://127.0.0.1:8765`. Start the PC app before testing.
-- **Local page unavailable:** run `start_payment_monitor.bat`; check `logs\startup.log`, `logs\console.log`, and `logs\listener.log`. Do not share logs without removing private data.
-- **No Khmer voice:** try another mobile browser/device and enable its Khmer speech voice if available. Speech cannot be guaranteed when the phone tab is suspended or closed.
-- Existing local SQLite history is not uploaded elsewhere; remote reads go through the tunnel directly to the PC.
-
-## Checks
-
-Run from the project folder:
+From PowerShell in the project folder:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -v
 node --check app.js
-node --test tests\test_payment_notifications.test.js
-node --test tests\test_phone_speech.test.js
+node --test tests\test_payment_notifications.test.js tests\test_phone_speech.test.js
 ```
+
+The tests use synthetic payment fixtures; they do not sign in to Telegram or register a Windows scheduled task.
